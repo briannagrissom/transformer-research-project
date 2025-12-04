@@ -1,0 +1,14 @@
+.DS_Store
+.venv/
+__pycache__/
+*.py[cod]
+logs/
+figures/*.png
+figures/*.pdf
+TMUX_GUIDE.md
+test_denoising.sh
+run_copying_experiments.sh
+run_copying_sequential.sh
+SETUP.md
+monitor_copying.sh
+.vscode/
