@@ -368,6 +368,8 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
                 f"[seed={seed}] Epoch {epoch+1}: train_loss={train_loss:.4f}, "
                 f"val_loss={metrics['loss']:.4f}, recall_acc={metrics['recall_accuracy']:.4f}"
             )
+            if metrics['recall_accuracy'] == 1.0:
+                break
         finals.append(metrics)
     
     return {
