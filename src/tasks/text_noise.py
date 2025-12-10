@@ -152,6 +152,58 @@ def compute_edit_distance(s1: str, s2: str) -> int:
     return dp[m][n]
 
 
+def add_single_char_noise(text: str, noise_type: Literal["substitution", "transposition"] = "substitution") -> str:
+    """
+    Add noise to exactly ONE character in the string.
+    
+    For substitution: randomly pick one character and replace it with a different letter.
+    For transposition: randomly pick one adjacent pair and swap them.
+    
+    Args:
+        text: Input string to corrupt
+        noise_type: Type of noise - "substitution" or "transposition"
+        
+    Returns:
+        Corrupted string with exactly one character changed
+        
+    Example:
+        >>> add_single_char_noise("hello", "substitution")
+        "hello" -> "hxllo" (random position, random letter)
+    """
+    if len(text) == 0:
+        return text
+    
+    text_lower = text.lower()
+    chars = list(text_lower)
+    
+    if noise_type == "substitution":
+        # Pick a random position
+        pos = random.randint(0, len(chars) - 1)
+        
+        # If it's not alphabetic, just return original
+        if not chars[pos].isalpha():
+            return text_lower
+        
+        # Pick a random letter different from the current one
+        original_char = chars[pos]
+        possible_chars = [c for c in string.ascii_lowercase if c != original_char]
+        chars[pos] = random.choice(possible_chars)
+        
+    elif noise_type == "transposition":
+        # Need at least 2 characters to transpose
+        if len(chars) < 2:
+            return text_lower
+        
+        # Pick a random position to swap with next position
+        pos = random.randint(0, len(chars) - 2)
+        chars[pos], chars[pos + 1] = chars[pos + 1], chars[pos]
+    
+    else:
+        raise ValueError(f"Unknown noise_type: {noise_type}")
+    
+    return ''.join(chars)
+
+
 def compute_character_error_rate(original: str, noisy: str) -> float:
     """
     Compute character error rate (CER) between original and noisy strings.
