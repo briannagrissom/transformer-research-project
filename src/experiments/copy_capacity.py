@@ -401,6 +401,8 @@ def run_experiment(args: argparse.Namespace) -> Dict[str, float]:
     Returns:
         Final metrics from the last run
     """
+    print('Running copying capacity experiment...', flush=True)
+
     # Determine which device to use
     device = resolve_device(args.device)
     
