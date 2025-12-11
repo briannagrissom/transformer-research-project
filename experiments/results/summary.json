@@ -622,6 +622,209 @@
       "source_file": "cue_rule-none.json"
     }
   },
+  "classification": {
+    "hebbian": {
+      "dataset": null,
+      "aggregate": {
+        "num_runs": 3,
+        "loss_mean": 1.6096075593736436,
+        "loss_std": 0.00040765084826826803,
+        "accuracy_mean": 0.20000000000000004,
+        "accuracy_std": 2.7755575615628914e-17,
+        "eta_mean_mean": 2.892165832554383e-05,
+        "eta_mean_std": 1.0661463830740252e-05,
+        "eta_std_mean": 1.6155063659190976e-06,
+        "eta_std_std": 1.5711197548596274e-06,
+        "plastic_norm_mean_mean": 0.008935082743944254,
+        "plastic_norm_mean_std": 0.003449875831358917,
+        "plastic_norm_std_mean": 0.00793352416084174,
+        "plastic_norm_std_std": 0.0030596540285486636,
+        "edit_distance_mean_mean": 0.8599661904761904,
+        "edit_distance_mean_std": 0.006349212342589795,
+        "edit_distance_std_mean": 0.3777063045881799,
+        "edit_distance_std_std": 0.0016510660662349345,
+        "train_loss_mean": 1.6110180860731333,
+        "train_loss_std": 0.001901873681949486,
+        "train_eta_mean_mean": 3.446380119767885e-05,
+        "train_eta_mean_std": 1.1651884475211046e-05,
+        "train_eta_std_mean": 1.947005569870472e-05,
+        "train_eta_std_std": 2.3222219442623556e-05,
+        "train_plastic_norm_mean_mean": 0.007714230419673081,
+        "train_plastic_norm_mean_std": 0.0032629328114568285,
+        "train_plastic_norm_std_mean": 0.006888084692934425,
+        "train_plastic_norm_std_std": 0.0028530664247351707,
+        "train_edit_distance_mean_mean": 0.9132930423280423,
+        "train_edit_distance_mean_std": 0.0011775835140017546,
+        "train_edit_distance_std_mean": 0.47368765324994144,
+        "train_edit_distance_std_std": 0.00021286236823441995,
+        "epoch_mean": 20.0,
+        "epoch_std": 0.0
+      },
+      "task_config": {
+        "train": {
+          "ways": 5,
+          "shots": 1,
+          "queries": 15,
+          "noise_type": "transposition",
+          "noise_prob": 0.2,
+          "split": "train",
+          "vocab_size": 100
+        },
+        "val": {
+          "ways": 5,
+          "shots": 1,
+          "queries": 15,
+          "noise_type": "transposition",
+          "noise_prob": 0.2,
+          "split": "test",
+          "vocab_size": 100
+        }
+      },
+      "training_config": {
+        "epochs": 20,
+        "episodes_per_epoch": 200,
+        "val_episodes": 100,
+        "lr": 0.001,
+        "weight_decay": 0.0005,
+        "clip_norm": 5.0
+      },
+      "source_file": "denoising_text_rule-hebbian_noise-transposition_prob-02.json"
+    },
+    "gradient": {
+      "dataset": null,
+      "aggregate": {
+        "num_runs": 3,
+        "loss_mean": 1.6095154344240825,
+        "loss_std": 9.70903432773445e-05,
+        "accuracy_mean": 0.2046666666666667,
+        "accuracy_std": 0.012684198393626967,
+        "eta_mean_mean": 0.07976180573164797,
+        "eta_mean_std": 0.032685162305730014,
+        "eta_std_mean": 8.745331557434492e-06,
+        "eta_std_std": 1.172815569141768e-05,
+        "plastic_norm_mean_mean": 1.5698398767656888e-08,
+        "plastic_norm_mean_std": 1.7385100537344154e-08,
+        "plastic_norm_std_mean": 4.901871161694335e-09,
+        "plastic_norm_std_std": 4.833904409498217e-09,
+        "edit_distance_mean_mean": 0.8009483068783069,
+        "edit_distance_mean_std": 0.0016176710214402402,
+        "edit_distance_std_mean": 0.45529842797039527,
+        "edit_distance_std_std": 0.0017734641493890183,
+        "train_loss_mean": 1.6094701800876194,
+        "train_loss_std": 1.6708148555995593e-05,
+        "train_eta_mean_mean": 0.07998779224643172,
+        "train_eta_mean_std": 0.03286425347082406,
+        "train_eta_std_mean": 0.0003294848685598621,
+        "train_eta_std_std": 5.744575873366301e-05,
+        "train_plastic_norm_mean_mean": 1.616566128519745e-08,
+        "train_plastic_norm_mean_std": 1.7783897645204692e-08,
+        "train_plastic_norm_std_mean": 5.1353534283465195e-09,
+        "train_plastic_norm_std_std": 5.035882107101713e-09,
+        "train_edit_distance_mean_mean": 0.8539667195767194,
+        "train_edit_distance_mean_std": 0.00523950259846803,
+        "train_edit_distance_std_mean": 0.5433165333430396,
+        "train_edit_distance_std_std": 0.005524906766538662,
+        "epoch_mean": 20.0,
+        "epoch_std": 0.0
+      },
+      "task_config": {
+        "train": {
+          "ways": 5,
+          "shots": 1,
+          "queries": 15,
+          "noise_type": "transposition",
+          "noise_prob": 0.0,
+          "split": "train",
+          "vocab_size": 100
+        },
+        "val": {
+          "ways": 5,
+          "shots": 1,
+          "queries": 15,
+          "noise_type": "transposition",
+          "noise_prob": 0.0,
+          "split": "test",
+          "vocab_size": 100
+        }
+      },
+      "training_config": {
+        "epochs": 20,
+        "episodes_per_epoch": 200,
+        "val_episodes": 100,
+        "lr": 0.001,
+        "weight_decay": 0.0005,
+        "clip_norm": 5.0
+      },
+      "source_file": "denoising_text_rule-gradient_noise-transposition_prob-0.json"
+    },
+    "none": {
+      "dataset": null,
+      "aggregate": {
+        "num_runs": 3,
+        "loss_mean": 1.6094413689189488,
+        "loss_std": 1.2751971304066413e-06,
+        "accuracy_mean": 0.20000000000000004,
+        "accuracy_std": 2.7755575615628914e-17,
+        "eta_mean_mean": 0.0,
+        "eta_mean_std": 0.0,
+        "eta_std_mean": 0.0,
+        "eta_std_std": 0.0,
+        "plastic_norm_mean_mean": 0.0,
+        "plastic_norm_mean_std": 0.0,
+        "plastic_norm_std_mean": 0.0,
+        "plastic_norm_std_std": 0.0,
+        "edit_distance_mean_mean": 0.8599661904761904,
+        "edit_distance_mean_std": 0.006349212342589795,
+        "edit_distance_std_mean": 0.3777063045881799,
+        "edit_distance_std_std": 0.0016510660662349345,
+        "train_loss_mean": 1.609546635267469,
+        "train_loss_std": 3.29600845239405e-05,
+        "train_eta_mean_mean": 0.0,
+        "train_eta_mean_std": 0.0,
+        "train_eta_std_mean": 0.0,
+        "train_eta_std_std": 0.0,
+        "train_plastic_norm_mean_mean": 0.0,
+        "train_plastic_norm_mean_std": 0.0,
+        "train_plastic_norm_std_mean": 0.0,
+        "train_plastic_norm_std_std": 0.0,
+        "train_edit_distance_mean_mean": 0.9132930423280423,
+        "train_edit_distance_mean_std": 0.0011775835140017546,
+        "train_edit_distance_std_mean": 0.47368765324994144,
+        "train_edit_distance_std_std": 0.00021286236823441995,
+        "epoch_mean": 20.0,
+        "epoch_std": 0.0
+      },
+      "task_config": {
+        "train": {
+          "ways": 5,
+          "shots": 1,
+          "queries": 15,
+          "noise_type": "transposition",
+          "noise_prob": 0.2,
+          "split": "train",
+          "vocab_size": 100
+        },
+        "val": {
+          "ways": 5,
+          "shots": 1,
+          "queries": 15,
+          "noise_type": "transposition",
+          "noise_prob": 0.2,
+          "split": "test",
+          "vocab_size": 100
+        }
+      },
+      "training_config": {
+        "epochs": 20,
+        "episodes_per_epoch": 200,
+        "val_episodes": 100,
+        "lr": 0.001,
+        "weight_decay": 0.0005,
+        "clip_norm": 5.0
+      },
+      "source_file": "denoising_text_rule-none_noise-transposition_prob-02.json"
+    }
+  },
   "few_shot_regression": {
     "gradient": {
       "dataset": null,
