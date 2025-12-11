@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass
 from typing import Literal
 
-from src.tasks.text_noise import add_noise
+from src.tasks.text_noise import add_noise, add_single_char_noise
 
 
 # Vocabulary of 100 common English words
@@ -43,7 +43,6 @@ class TextClassificationConfig:
     shots: int = 1  # Number of support examples per class
     queries: int = 15  # Number of query examples per class
     noise_type: Literal["substitution", "transposition"] = "substitution"
-    noise_prob: float = 0.1  # Probability of noise per character
     split: Literal["train", "test"] = "train"
     vocab_size: int = 100  # Total vocabulary size
     
@@ -111,29 +110,40 @@ class TextClassificationTask:
         episode_class_indices = random.sample(self.config.class_indices, self.config.ways)
         class_words = [self.vocabulary[idx] for idx in episode_class_indices] # length: ways
         
-        # Generate support set (noisy)
+        # Generate support set (CLEAN - no noise)
         support_strings = [] # length: ways * shots
         support_labels = [] # length: ways * shots
         
         for class_idx, word in enumerate(class_words):
             for _ in range(self.config.shots):
-                # Add noise to the support example
-                noisy_word = add_noise(
-                    word,
-                    noise_type=self.config.noise_type,
-                    noise_prob=self.config.noise_prob,
-                )
-                support_strings.append(noisy_word)
+                # Support examples are clean (no noise)
+                support_strings.append(word)
                 support_labels.append(class_idx)
         
-        # Generate query set (clean)
-        query_strings = [] # length: ways * queries
-        query_labels = [] # length: ways * queries
+        # Generate query set (NOISY - each with exactly one character changed, all unique)
+        # The model must learn to recognize noisy versions of the clean support examples.
+        query_strings = [] # length: ways * queries (or less if can't generate enough unique)
+        query_labels = [] # length: ways * queries (or less if can't generate enough unique)
         
         for class_idx, word in enumerate(class_words):
-            for _ in range(self.config.queries):
-                # Query examples are always clean
-                query_strings.append(word)
+            # Generate unique noisy versions of this word
+            noisy_variants = set()
+            max_attempts = self.config.queries * 10  # Try up to 10x the needed amount
+            attempts = 0
+            
+            while len(noisy_variants) < self.config.queries and attempts < max_attempts:
+                # Add exactly one character of noise
+                noisy_word = add_single_char_noise(word, noise_type=self.config.noise_type)
+                
+                # Only add if it's unique and actually different from original
+                if noisy_word != word and noisy_word not in noisy_variants:
+                    noisy_variants.add(noisy_word)
+                
+                attempts += 1
+            
+            # Add all unique noisy variants to query set
+            for noisy_word in noisy_variants:
+                query_strings.append(noisy_word)
                 query_labels.append(class_idx)
         
         # Shuffle support and query sets independently

@@ -1,14 +1,13 @@
 """
-Denoising text classification experiment.
+Word category classification experiment.
 
 This experiment tests a plastic transformer's ability to perform few-shot
-classification on noisy text inputs, following a support-noisy → query-clean setup.
+classification on word categories (animals, clothing, furniture).
 """
 import argparse
 import json
 import os
 import random
-import sys
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Tuple
 
@@ -19,9 +18,9 @@ import torch.nn.functional as F
 
 from src.models.text_encoder import CharacterEncoder
 from src.models.onehot_text_encoder import OneHotTextEncoder
+from src.models.word2vec_encoder import SimpleSemanticEncoder, Word2VecEncoder
 from src.models.plastic_transformer import PlasticTransformerModel
-from src.tasks.text_classification import TextClassificationConfig, TextClassificationTask, VOCABULARY
-from src.tasks.text_noise import compute_character_error_rate
+from src.tasks.word_category_classification import WordCategoryConfig, WordCategoryTask, ALL_WORDS, CATEGORIES
 
 
 def resolve_device(preferred: str) -> torch.device:
@@ -88,40 +87,12 @@ class TrainingConfig:
 
 
 def build_support_vector(embedding: torch.Tensor, label_one_hot: torch.Tensor) -> torch.Tensor:
-    """
-    Build input vector for a support example.
-    
-    The support vector includes:
-    - Image/text embedding
-    - One-hot class label
-    - 0 indicator (marks this as a support example)
-    
-    Args:
-        embedding: Tensor of shape (embedding_dim,)
-        label_one_hot: Tensor of shape (ways,)
-        
-    Returns:
-        Tensor of shape (embedding_dim + ways + 1,)
-    """
+    """Build input vector for a support example."""
     return torch.cat([embedding, label_one_hot, torch.zeros(1, device=embedding.device)])
 
 
 def build_query_vector(embedding: torch.Tensor, ways: int) -> torch.Tensor:
-    """
-    Build input vector for a query example.
-    
-    The query vector includes:
-    - Image/text embedding
-    - Zero-filled label placeholder
-    - 1 indicator (marks this as a query example)
-    
-    Args:
-        embedding: Tensor of shape (embedding_dim,)
-        ways: Number of classes
-        
-    Returns:
-        Tensor of shape (embedding_dim + ways + 1,)
-    """
+    """Build input vector for a query example."""
     return torch.cat(
         [
             embedding,
@@ -134,57 +105,30 @@ def build_query_vector(embedding: torch.Tensor, ways: int) -> torch.Tensor:
 def train_epoch(
     encoder: nn.Module,
     transformer: PlasticTransformerModel,
-    task: TextClassificationTask,
+    task: WordCategoryTask,
     device: torch.device,
     optimizer: torch.optim.Optimizer,
     loss_fn: nn.Module,
     config: TrainingConfig,
     ways: int,
 ) -> Tuple[float, Dict[str, float]]:
-    """
-    Train for one epoch (multiple episodes).
-    
-    Each episode:
-    1. Sample noisy support and clean query strings
-    2. Encode strings to embeddings
-    3. Forward pass through support set (adapt plastic weights)
-    4. Forward pass through query set (compute loss)
-    5. Backpropagate and update static weights
-    
-    Args:
-        encoder: Text encoder (CharacterEncoder)
-        transformer: Plastic transformer model
-        task: Text classification task
-        device: Device to run on
-        optimizer: Optimizer
-        loss_fn: Loss function
-        config: Training configuration
-        ways: Number of classes per episode
-        
-    Returns:
-        Tuple of (average loss, diagnostics dict)
-    """
+    """Train for one epoch (multiple episodes)."""
     encoder.train()
     transformer.train()
     total_loss = 0.0
     eta_values: List[float] = []
     plastic_values: List[float] = []
-    edit_distances: List[float] = []
     
     for ep_idx in range(config.episodes_per_epoch):
         if ep_idx % 10 == 0:
             print(f"  Training episode {ep_idx+1}/{config.episodes_per_epoch}", flush=True)
-        # Sample episode
-        support_strings, support_labels, query_strings, query_labels, class_words = task.sample_episode()
         
-        # Compute edit distances for diagnostics (between QUERY strings and their corresponding class words)
-        for query_str, query_label in zip(query_strings, query_labels):
-            class_word = class_words[query_label]
-            edit_distances.append(compute_character_error_rate(class_word, query_str))
+        # Sample episode
+        support_strings, support_labels, query_strings, query_labels, category_names = task.sample_episode()
         
         # Encode strings to embeddings
-        support_embeddings = encoder(support_strings)  # (ways * shots, embedding_dim)
-        query_embeddings = encoder(query_strings)  # (ways * queries, embedding_dim)
+        support_embeddings = encoder(support_strings)
+        query_embeddings = encoder(query_strings)
         
         # Convert labels to tensors
         support_labels_tensor = torch.tensor(support_labels, dtype=torch.long, device=device)
@@ -230,8 +174,6 @@ def train_epoch(
         "eta_std": summarise(eta_values)[1],
         "plastic_norm_mean": summarise(plastic_values)[0],
         "plastic_norm_std": summarise(plastic_values)[1],
-        "edit_distance_mean": summarise(edit_distances)[0],
-        "edit_distance_std": summarise(edit_distances)[1],
     }
     return total_loss / max(config.episodes_per_epoch, 1), diag
 
@@ -239,45 +181,21 @@ def train_epoch(
 def evaluate(
     encoder: nn.Module,
     transformer: PlasticTransformerModel,
-    task: TextClassificationTask,
+    task: WordCategoryTask,
     device: torch.device,
     loss_fn: nn.Module,
     ways: int,
     num_episodes: int,
 ) -> Dict[str, float]:
-    """
-    Evaluate on multiple episodes.
-    
-    For each episode:
-    1. Sample noisy support and clean query strings
-    2. Encode strings to embeddings
-    3. Forward pass through support set (adapt plastic weights, no backprop)
-    4. Forward pass through query set (compute accuracy and loss, no backprop)
-    
-    Args:
-        encoder: Text encoder
-        transformer: Plastic transformer
-        task: Text classification task
-        device: Device
-        loss_fn: Loss function
-        ways: Number of classes
-        num_episodes: Number of episodes to evaluate
-        
-    Returns:
-        Dictionary of evaluation metrics
-    """
+    """Evaluate on multiple episodes."""
     encoder.eval()
     transformer.eval()
     losses: List[float] = []
     accuracies: List[float] = []
     eta_values: List[float] = []
     plastic_values: List[float] = []
-    edit_distances: List[float] = []
     
-    # Track episode details
-    episode_details: List[Dict] = []
-    
-    # Confusion matrix: rows = true labels, cols = predicted labels
+    # Confusion matrix
     confusion_matrix = np.zeros((ways, ways), dtype=np.int64)
     
     # Use gradient context if using gradient-based plasticity
@@ -287,13 +205,9 @@ def evaluate(
         for episode_idx in range(num_episodes):
             if episode_idx % 10 == 0:
                 print(f"  Evaluating episode {episode_idx+1}/{num_episodes}", flush=True)
-            # Sample episode
-            support_strings, support_labels, query_strings, query_labels, class_words = task.sample_episode()
             
-            # Compute edit distances (between QUERY strings and their corresponding class words)
-            for query_str, query_label in zip(query_strings, query_labels):
-                class_word = class_words[query_label]
-                edit_distances.append(compute_character_error_rate(class_word, query_str))
+            # Sample episode
+            support_strings, support_labels, query_strings, query_labels, category_names = task.sample_episode()
             
             # Encode strings
             support_embeddings = encoder(support_strings)
@@ -306,10 +220,6 @@ def evaluate(
             loss = 0.0
             correct = 0
             total = 0
-            
-            # Track predictions for this episode
-            episode_predictions = []
-            episode_true_labels = []
             
             # Process support set
             for idx in range(support_embeddings.shape[0]):
@@ -337,10 +247,6 @@ def evaluate(
                 # Update confusion matrix
                 confusion_matrix[true_label, pred] += 1
                 
-                # Track predictions
-                episode_predictions.append(pred)
-                episode_true_labels.append(true_label)
-                
                 eta_values.append(float(outputs["eta"].item()))
                 plastic_values.append(float(outputs["diagnostics"]["plastic_norm"].item()))
             
@@ -348,23 +254,9 @@ def evaluate(
             episode_accuracy = correct / max(total, 1)
             losses.append(episode_loss)
             accuracies.append(episode_accuracy)
-            
-            # Store episode details
-            episode_details.append({
-                "episode_idx": episode_idx,
-                "support_strings": support_strings,
-                "support_labels": support_labels,
-                "class_words": class_words,
-                "query_predictions": episode_predictions,
-                "query_true_labels": episode_true_labels,
-                "query_strings": query_strings[:10],  # Store first 10 query strings to keep output manageable
-                "accuracy": episode_accuracy,
-                "loss": episode_loss,
-            })
     
     eta_mean, eta_std = summarise(eta_values)
     plastic_mean, plastic_std = summarise(plastic_values)
-    edit_mean, edit_std = summarise(edit_distances)
     
     return {
         "loss": sum(losses) / max(len(losses), 1),
@@ -373,10 +265,7 @@ def evaluate(
         "eta_std": eta_std,
         "plastic_norm_mean": plastic_mean,
         "plastic_norm_std": plastic_std,
-        "edit_distance_mean": edit_mean,
-        "edit_distance_std": edit_std,
         "confusion_matrix": confusion_matrix.tolist(),
-        "episode_details": episode_details,
     }
 
 
@@ -386,31 +275,43 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
     print(f"[seed={seed}] Starting single run...", flush=True)
     
     # Create tasks
-    train_task = TextClassificationTask(
-        TextClassificationConfig(
+    train_task = WordCategoryTask(
+        WordCategoryConfig(
             ways=args.ways,
             shots=args.shots,
             queries=args.queries,
-            noise_type=args.noise_type,
             split="train",
         )
     )
-    val_task = TextClassificationTask(
-        TextClassificationConfig(
+    val_task = WordCategoryTask(
+        WordCategoryConfig(
             ways=args.ways,
             shots=args.shots,
             queries=args.queries,
-            noise_type=args.noise_type,
             split="test",
         )
     )
     
     # Create encoder and transformer
-    # Use OneHotTextEncoder for testing (guarantees unique embeddings per word)
-    if args.use_onehot_encoder:
-        print(f"[seed={seed}] Using OneHotTextEncoder with vocabulary size {len(VOCABULARY)}", flush=True)
+    if args.use_word2vec_encoder:
+        print(f"[seed={seed}] Using Word2VecEncoder with GloVe embeddings", flush=True)
+        encoder = Word2VecEncoder(
+            vocabulary=ALL_WORDS,
+            output_dim=args.embedding_dim,
+            glove_path=args.glove_path,
+            glove_dim=args.glove_dim,
+        ).to(device)
+    elif args.use_semantic_encoder:
+        print(f"[seed={seed}] Using SimpleSemanticEncoder (category-based embeddings)", flush=True)
+        encoder = SimpleSemanticEncoder(
+            vocabulary=ALL_WORDS,
+            categories=CATEGORIES,
+            output_dim=args.embedding_dim,
+        ).to(device)
+    elif args.use_onehot_encoder:
+        print(f"[seed={seed}] Using OneHotTextEncoder with vocabulary size {len(ALL_WORDS)}", flush=True)
         encoder = OneHotTextEncoder(
-            vocabulary=VOCABULARY,
+            vocabulary=ALL_WORDS,
             output_dim=args.embedding_dim,
         ).to(device)
     else:
@@ -482,14 +383,11 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
         metrics["train_eta_std"] = train_diag["eta_std"]
         metrics["train_plastic_norm_mean"] = train_diag["plastic_norm_mean"]
         metrics["train_plastic_norm_std"] = train_diag["plastic_norm_std"]
-        metrics["train_edit_distance_mean"] = train_diag["edit_distance_mean"]
-        metrics["train_edit_distance_std"] = train_diag["edit_distance_std"]
         metrics["epoch"] = epoch + 1
         history.append(metrics)
         print(
             f"[seed={seed}] Epoch {epoch+1}: train_loss={train_loss:.4f}, "
-            f"val_loss={metrics['loss']:.4f}, acc={metrics['accuracy']:.4f}, "
-            f"edit_dist={metrics['edit_distance_mean']:.4f}",
+            f"val_loss={metrics['loss']:.4f}, acc={metrics['accuracy']:.4f}",
             flush=True
         )
     
@@ -506,7 +404,7 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
 
 def run_experiment(args: argparse.Namespace) -> Dict[str, float]:
     """Run full experiment with multiple seeds."""
-    print('Running denoising text classification experiment...', flush=True)
+    print('Running word category classification experiment...', flush=True)
     device = resolve_device(args.device)
     seeds = [args.base_seed + i for i in range(args.seeds)]
     run_summaries = []
@@ -557,7 +455,7 @@ def run_experiment(args: argparse.Namespace) -> Dict[str, float]:
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Denoising text classification experiment")
+    parser = argparse.ArgumentParser(description="Word category classification experiment")
     
     # Model arguments
     parser.add_argument("--rule", choices=["none", "hebbian", "gradient"], default="gradient",
@@ -588,23 +486,29 @@ def parse_args() -> argparse.Namespace:
                         help="Maximum norm for plastic weights")
     
     # Task arguments
-    parser.add_argument("--ways", type=int, default=5,
-                        help="Number of classes per episode")
+    parser.add_argument("--ways", type=int, default=3,
+                        help="Number of categories per episode")
     parser.add_argument("--shots", type=int, default=1,
-                        help="Number of support examples per class")
-    parser.add_argument("--queries", type=int, default=15,
-                        help="Number of query examples per class (attempts to generate this many unique noisy variants)")
-    parser.add_argument("--noise-type", choices=["substitution", "transposition"], default="substitution",
-                        help="Type of character-level noise (exactly one character per query)")
+                        help="Number of support examples per category")
+    parser.add_argument("--queries", type=int, default=2,
+                        help="Number of query examples per category")
+    parser.add_argument("--use-word2vec-encoder", action="store_true",
+                        help="Use Word2VecEncoder with pre-trained GloVe embeddings")
+    parser.add_argument("--glove-path", type=str, default="embeddings/glove.6B.100d.txt",
+                        help="Path to GloVe embeddings file")
+    parser.add_argument("--glove-dim", type=int, default=100,
+                        help="Dimension of GloVe embeddings (50, 100, 200, or 300)")
+    parser.add_argument("--use-semantic-encoder", action="store_true",
+                        help="Use SimpleSemanticEncoder (category-based embeddings with semantic structure)")
     parser.add_argument("--use-onehot-encoder", action="store_true",
-                        help="Use OneHotTextEncoder instead of CharacterEncoder (for testing)")
+                        help="Use OneHotTextEncoder (independent random embeddings)")
     
     # Training arguments
-    parser.add_argument("--epochs", type=int, default=20,
+    parser.add_argument("--epochs", type=int, default=5,
                         help="Number of training epochs")
-    parser.add_argument("--episodes-per-epoch", type=int, default=200,
+    parser.add_argument("--episodes-per-epoch", type=int, default=80,
                         help="Number of episodes per epoch")
-    parser.add_argument("--val-episodes", type=int, default=100,
+    parser.add_argument("--val-episodes", type=int, default=50,
                         help="Number of validation episodes")
     parser.add_argument("--lr", type=float, default=1e-3,
                         help="Learning rate")
@@ -618,7 +522,7 @@ def parse_args() -> argparse.Namespace:
                         help="Device to use")
     parser.add_argument("--base-seed", type=int, default=123,
                         help="Base random seed")
-    parser.add_argument("--seeds", type=int, default=3,
+    parser.add_argument("--seeds", type=int, default=1,
                         help="Number of random seeds to run")
     parser.add_argument("--output-path", type=str, default="",
                         help="Path to save results JSON")
@@ -628,8 +532,5 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
-    print(f'Starting denoising text classification experiment with args: {args}', flush=True)
+    print(f'Starting word category classification experiment with args: {args}', flush=True)
     run_experiment(args)
-
-
-
