@@ -1,0 +1,21 @@
+{
+  "config": {
+    "model_name": "bert-base-uncased",
+    "hidden_dim": 256,
+    "finetune": false,
+    "task": {
+      "seq_length": 5,
+      "delay": 20,
+      "vocab_size": 10
+    },
+    "evaluation": {
+      "num_batches": 100,
+      "batch_size": 32
+    }
+  },
+  "metrics": {
+    "loss": 2.313145190823463,
+    "accuracy": 0.0945625,
+    "total_tokens": 16000
+  }
+}

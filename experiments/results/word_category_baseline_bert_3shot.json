@@ -1,0 +1,106 @@
+{
+  "config": {
+    "model_name": "bert-base-uncased",
+    "output_dim": 256,
+    "finetune": false,
+    "task": {
+      "ways": 3,
+      "shots": 3,
+      "queries": 2
+    },
+    "evaluation": {
+      "train_episodes": 200,
+      "test_episodes": 100
+    }
+  },
+  "train_metrics": {
+    "loss": 0.9547047355771064,
+    "loss_std": 0.038529514521333914,
+    "accuracy": 0.7625,
+    "accuracy_std": 0.14379528272281164,
+    "confusion_matrix": [
+      [
+        311,
+        44,
+        45
+      ],
+      [
+        48,
+        292,
+        60
+      ],
+      [
+        45,
+        43,
+        312
+      ]
+    ],
+    "semantic_confusion_matrix": [
+      [
+        299,
+        80,
+        21
+      ],
+      [
+        17,
+        365,
+        18
+      ],
+      [
+        4,
+        145,
+        251
+      ]
+    ],
+    "semantic_categories": [
+      "animals",
+      "clothing",
+      "furniture"
+    ]
+  },
+  "test_metrics": {
+    "loss": 0.9774444091320038,
+    "loss_std": 0.028571389847063845,
+    "accuracy": 0.6916666666666665,
+    "accuracy_std": 0.16393596310755001,
+    "confusion_matrix": [
+      [   
+        137,
+        29,
+        34
+      ],
+      [
+        32,
+        128,
+        40
+      ],
+      [
+        30,
+        20,
+        150
+      ]
+    ],
+    "semantic_confusion_matrix": [
+      [
+        184,
+        14,
+        2
+      ],
+      [
+        42,
+        153,
+        5
+      ],
+      [
+        58,
+        64,
+        78
+      ]
+    ],
+    "semantic_categories": [
+      "animals",
+      "clothing",
+      "furniture"
+    ]
+  }
+}
