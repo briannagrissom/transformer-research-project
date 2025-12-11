@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-RESULTS_DIR = Path("experiments/results")
+RESULTS_DIR = Path("experiments/our_experiments")
 FIGURES_DIR = Path("figures")
 
 

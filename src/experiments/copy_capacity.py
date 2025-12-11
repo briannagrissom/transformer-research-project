@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from src.models.plastic_transformer import PlasticTransformerModel
-from src.tasks.copying import CopyingTaskConfig, CopyingTaskDataset
+from src.tasks.copying import CopyingTaskDataset, CopyingTaskConfig
+from src.tasks.copying_capacity import CapacityTaskConfig
 
 
 
@@ -297,6 +298,15 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
     history: List[Dict[str, float]] = []
     finals: List[Dict[str, float]] = []
 
+    capacity_cfg = CapacityTaskConfig(
+        seq_low_length=args.seq_low_length,
+        seq_high_length=args.seq_high_length,
+        delay=args.delay,
+        vocab_size=args.vocab_size,
+        dataset_size=args.dataset_size,
+        device=device
+    )
+
     for seq_length in range(args.seq_low_length, args.seq_high_length + 1):
     
         # Create copying task configuration
@@ -375,7 +385,7 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
     return {
         "history": history,  # Metrics for each epoch
         "final": finals,  # Final epoch metrics
-        "config": asdict(copying_cfg),  # Task configuration
+        "config": asdict(capacity_cfg),  # Task configuration
         "training": asdict(train_cfg),  # Training configuration
     }
 
@@ -391,6 +401,8 @@ def run_experiment(args: argparse.Namespace) -> Dict[str, float]:
     Returns:
         Final metrics from the last run
     """
+    print('Running copying capacity experiment...', flush=True)
+
     # Determine which device to use
     device = resolve_device(args.device)
     
@@ -459,7 +471,7 @@ def parse_args() -> argparse.Namespace:
     # Task parameters
     parser.add_argument("--seq-low-length", type=int, default=1,
                         help="Minimum length of sequence to memorize and recall")
-    parser.add_argument("--seq-high-length", type=int, default=20,
+    parser.add_argument("--seq-high-length", type=int, default=15,
                         help="Maximum length of sequence to memorize and recall")
     parser.add_argument("--delay", type=int, default=5,
                         help="Number of blank steps between presentation and recall")
