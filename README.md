@@ -23,13 +23,13 @@ We reproduce and extend the experiments from [Chaudhary (2025)](https://arxiv.or
 4. **Three-Shot Text Category Classification** — 3-way, 3-shot word classification (animals / furniture / clothing).
 5. **Pre-trained Transformer Baselines** — BERT and CLIP comparisons.
 
-See `project.tex` for the full report.
+See `final_report.pdf` for the full report.
 
 ## Repository Layout
 
 ```
 .
-├── project.tex                         # Final report (LaTeX source)
+├── final_report.pdf                    # Final report 
 ├── requirements.txt                    # Python dependencies
 ├── src/
 │   ├── models/                         # Plastic Transformer, encoders
