@@ -1,22 +1,23 @@
+# OS / editor
 .DS_Store
+.vscode/
+
+# Python
 .venv/
 __pycache__/
 *.py[cod]
-logs/
-figures/*.png
-figures/*.pdf
-TMUX_GUIDE.md
-test_denoising.sh
-run_copying_experiments.sh
-run_copying_sequential.sh
-SETUP.md
-monitor_copying.sh
-.vscode/
-test*.sh
-QUICK_REFERENCE.md
-EPISODE_ANALYSIS.md
-DENOISING_EXPERIMENT.md
-IMPLEMENTATION_SUMMARY.md
-embeddings/
+
+# Large data / embeddings (download locally)
 data/
-run*.sh
+embeddings/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+project-pdf.pdf
