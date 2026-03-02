@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-RESULTS_DIR = Path("experiments/new_experiments")
-FIGURES_DIR = Path("figures")
+RESULTS_DIR = Path("experiment_results/reproduced_results")
+FIGURES_DIR = Path("reproduced_figures")
 
 
 @dataclass

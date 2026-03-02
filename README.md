@@ -36,10 +36,11 @@ See `project.tex` for the full report.
 │   ├── tasks/                          # Task generators / datasets
 │   └── experiments/                    # CLI entry points for each experiment
 ├── scripts/                            # Aggregation & plotting utilities
-├── experiments/
-│   ├── results/                        # All final result JSONs
-│   └── tables/                         # Generated LaTeX tables
-├── reproduction_figures/               # Figures for reproduced experiments
+├── experiment_results/
+│   ├── reproduced_results/             # Reproduced experiment result JSONs
+│   ├── text_category_results/          # Text category classification results
+│   └── pre_trained_transformer_results/ # BERT & CLIP baseline results
+├── reproduced_figures/                 # Figures for reproduced experiments
 ├── extended_figures/                   # Figures for extended experiments
 └── word_category_figures/              # Figures for text classification experiment
 ```
@@ -63,7 +64,7 @@ Each experiment script accepts `--rule {none, hebbian, gradient}`, `--seeds`, `-
 ```bash
 python -m src.experiments.copying \
   --rule gradient --seq-length 5 --delay 20 --seeds 3 \
-  --output-path experiments/results/copy_delay20_rule-gradient.json
+  --output-path experiment_results/reproduced_results/copy_delay20_rule-gradient.json
 ```
 
 ### One-Shot Image Classification (CIFAR-FS / Omniglot)
@@ -73,7 +74,7 @@ python -m src.experiments.one_shot_classification \
   --rule hebbian --dataset cifarfs \
   --ways 5 --shots 1 --queries 15 \
   --epochs 20 --episodes-per-epoch 200 --seeds 3 \
-  --output-path experiments/results/classification_cifarfs_rule-hebbian.json
+  --output-path experiment_results/reproduced_results/classification_cifarfs_rule-hebbian.json
 ```
 
 Set `--dataset omniglot` for Omniglot. Torchvision downloads CIFAR-100 and Omniglot into `./data` automatically.
@@ -81,9 +82,9 @@ Set `--dataset omniglot` for Omniglot. Torchvision downloads CIFAR-100 and Omnig
 ### Three-Shot Text Category Classification
 
 ```bash
-python -m src.experiments.word_category \
+python -m src.experiments.few_shot_word_category \
   --rule gradient --seeds 3 \
-  --output-path experiments/results/word_category_3shot_gradient_semantic-encoder_FINAL.json
+  --output-path experiment_results/text_category_results/text_category_3shot_rule-gradient_semantic-encoder.json
 ```
 
 ### Copy Capacity (varying signal length)
@@ -91,16 +92,15 @@ python -m src.experiments.word_category \
 ```bash
 python -m src.experiments.copy_capacity \
   --rule hebbian --seeds 3 \
-  --output-path experiments/results/copy_capacity_rule-hebbian.json
+  --output-path experiment_results/reproduced_results/copy_capacity_rule-hebbian.json
 ```
 
 ## Generating Figures & Tables
 
 ```bash
-python scripts/aggregate_results.py          # experiments/results/summary.json
-python scripts/plot_results.py               # reproduction_figures/ & extended_figures/
+python scripts/aggregate_results.py          # experiment_results/reproduced_results/summary.json
+python scripts/plot_results.py               # reproduced_figures/
 python scripts/plot_word_category_results.py  # word_category_figures/
-python scripts/build_tables.py               # experiments/tables/
 ```
 
 ## Key Findings

@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-RESULTS_DIR = Path("experiments/word_category_results")
+RESULTS_DIR = Path("experiment_results/text_category_results")
 FIGURES_DIR = Path("word_category_figures")
 
 
@@ -40,7 +40,7 @@ def load_word_category_results() -> List[ResultRecord]:
     records: List[ResultRecord] = []
     
     # Look for word_category result files
-    for path in sorted(RESULTS_DIR.glob("word_category_*shot_*_semantic*.json")):
+    for path in sorted(RESULTS_DIR.glob("text_category_*shot_*.json")):
         if "glove" in path.name.lower():
             continue  # Skip GloVe results for now
         
@@ -288,7 +288,7 @@ def main() -> None:
     
     if not records:
         print("No word category results found!")
-        print("Looking for files matching: word_category_*shot_*_semantic*.json")
+        print("Looking for files matching: text_category_*shot_*.json")
         return
     
     print(f"Found {len(records)} result files")

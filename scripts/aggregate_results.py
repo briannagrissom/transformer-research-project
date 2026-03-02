@@ -83,7 +83,7 @@ def summarise(records: List[ResultRecord]) -> Dict[str, Dict]:
 
 
 def main() -> None:
-    results_dir = Path("experiments/new_experiments")
+    results_dir = Path("experiment_results/reproduced_results")
     if not results_dir.exists():
         raise SystemExit(f"Results directory '{results_dir}' not found.")
     records = load_results(results_dir)

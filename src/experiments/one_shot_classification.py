@@ -18,12 +18,6 @@ from src.tasks.few_shot_classification import (
     FewShotClassificationTask,
 )
 
-# python -m src.experiments.copying \
-#   --rule [RULE] \
-#   --delay 20 \
-#   --seeds 3 \
-#   --device mps \
-#   --output-path experiments/results/copy_delay20_rule-hebbian-MYEXP.json
 
 
 
