@@ -1,6 +1,17 @@
 """
 Word2Vec-based text encoder using pre-trained embeddings.
 Uses GloVe embeddings for semantic word representations.
+
+This encoder is one of several options for the few-shot text classification pipeline.
+Unlike the character-level encoder, this one uses pre-trained GloVe word vectors
+that already capture rich semantic relationships:
+  - Semantically similar words have similar vectors (e.g., "dog" and "cat" are close)
+  - Different categories tend to form clusters in the embedding space
+
+This gives the plastic transformer a semantic "head start" -- words in the same
+category (e.g., animals) already have similar representations before any plastic
+adaptation happens. The transformer's job is then to learn a decision boundary
+between the categories presented in each episode.
 """
 import os
 import numpy as np
@@ -12,8 +23,18 @@ class Word2VecEncoder(nn.Module):
     """
     Encodes strings using pre-trained Word2Vec/GloVe embeddings.
     
-    For unknown words, returns a learned embedding vector.
-    Projects embeddings to the desired output dimension.
+    Processing pipeline:
+      1. Look up word in the pre-trained GloVe vocabulary
+      2. Retrieve the fixed GloVe vector (e.g., 100-dimensional)
+      3. Project through a learned linear layer to the desired output_dim
+    
+    The GloVe vectors are FROZEN (not updated during training), but the projection
+    layer IS learned. This means the model can learn to emphasize dimensions of the
+    GloVe space that are most useful for few-shot category classification.
+    
+    For the few-shot task, this encoder's semantic structure means that after seeing
+    just one example of "dog" labeled as category 0, the model can potentially
+    recognize "cat" as the same category because their GloVe embeddings are similar.
     """
     
     def __init__(
@@ -122,9 +143,18 @@ class SimpleSemanticEncoder(nn.Module):
     """
     Simple semantic encoder that manually creates embeddings with semantic structure.
     
-    This is a fallback if GloVe files are not available. It creates embeddings where:
-    - Words in the same category have similar embeddings
-    - Words in different categories have different embeddings
+    This is a lightweight alternative to GloVe when pre-trained embeddings are not
+    available. It creates embeddings where:
+      - Words in the same category share a common base vector (learned)
+      - Each word has a small individual offset (learned) to distinguish it within
+        its category
+    
+    The category base vectors are initialized with high magnitude and normalized, so
+    different categories are well-separated in the embedding space from the start.
+    
+    For the few-shot task, this encoder explicitly encodes category membership into
+    the representation, making the plastic transformer's job easier -- it just needs
+    to learn to read the category signal from the embedding.
     """
     
     def __init__(

@@ -1,5 +1,16 @@
 """
 Character-level text encoder for converting strings to fixed-size embeddings.
+
+This encoder is one of several options for the few-shot text classification pipeline.
+It represents words based on their character composition, meaning:
+  - Morphologically similar words (e.g., "cat" vs "car") get similar embeddings
+  - The encoder can handle any string, even words not in its training vocabulary
+  - It does NOT inherently capture semantic meaning ("dog" and "cat" may be distant
+    despite being semantically related animals)
+
+The encoder uses a bidirectional LSTM to process character sequences, producing
+a fixed-size vector regardless of input string length. This vector is then fed
+into the plastic transformer as part of the few-shot learning pipeline.
 """
 import torch
 import torch.nn as nn
@@ -8,11 +19,20 @@ import string
 
 class CharacterEncoder(nn.Module):
     """
-    Encodes strings as character-level embeddings using an LSTM or GRU.
+    Encodes strings as character-level embeddings using a bidirectional LSTM.
     
-    This encoder converts variable-length strings into fixed-size vector representations
-    by processing character sequences through a recurrent network and using the final
-    hidden state as the embedding.
+    Processing pipeline:
+      1. String -> character indices (lookup table for a-z, space, special tokens)
+      2. Character indices -> character embeddings (learned embedding table)
+      3. Character embeddings -> LSTM hidden states (bidirectional, captures context)
+      4. Final hidden states (forward + backward) -> linear projection -> output embedding
+    
+    In the few-shot classification context:
+      - This encoder is trained end-to-end with the plastic transformer
+      - Gradients flow from the classification loss all the way back through the LSTM
+        to the character embeddings, so the encoder learns to produce representations
+        that are useful for the downstream few-shot task
+      - Since it's character-based, it can encode ANY string (not limited to a vocabulary)
     """
     
     def __init__(

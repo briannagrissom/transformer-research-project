@@ -3,6 +3,52 @@ Word category classification experiment.
 
 This experiment tests a plastic transformer's ability to perform few-shot
 classification on word categories (animals, clothing, furniture).
+
+=== HIGH-LEVEL ARCHITECTURE ===
+
+The system has two main components:
+  1. ENCODER: Converts word strings (e.g., "dog") into fixed-size embedding vectors.
+     Multiple encoder options exist (character-level LSTM, GloVe word2vec, semantic,
+     or one-hot), each representing words differently.
+  
+  2. PLASTIC TRANSFORMER: A transformer model whose feed-forward layers have
+     "plastic" (dynamically adjustable) weights. During each episode:
+        a) The transformer processes support examples one at a time, updating its
+           plastic weights via Hebbian or gradient-based learning rules
+        b) These adapted plastic weights encode the task-specific knowledge
+           (which words map to which categories)
+        c) The transformer then classifies query examples using the adapted weights
+
+=== DATA FLOW FOR ONE EPISODE ===
+
+  Strings:   ["dog", "shirt", "chair"]  (support, with labels [0, 1, 2])
+      |                                          
+      v                                          
+  Encoder:   convert to embedding vectors (batch_size, embedding_dim)
+      |                                          
+      v                                          
+  Build input vectors:                            
+    Support: [embedding | one_hot_label | 0]  -- label is provided, query flag = 0
+    Query:   [embedding | zeros         | 1]  -- no label, query flag = 1
+      |                                          
+      v                                          
+  Plastic Transformer (sequential, one token at a time):
+    - For each support token: process and UPDATE plastic weights (learn the task)
+    - For each query token: process and READ logits (make predictions)
+      |                                          
+      v                                          
+  Output logits -> CrossEntropyLoss against true query labels
+
+=== TRAINING (OUTER LOOP) vs ADAPTATION (INNER LOOP) ===
+
+  - INNER LOOP (within an episode): Plastic weight updates via Hebbian/gradient
+    rules. This is how the model "learns" a specific episode's task from the
+    support set. No gradient-based optimization here (for Hebbian rule).
+  
+  - OUTER LOOP (across episodes): Standard backprop + AdamW optimizer. This
+    trains the encoder, fixed transformer weights, plasticity coefficients
+    (alpha, beta), and the eta0 learning rate so that the inner loop adaptation
+    works well across many different episodes.
 """
 import argparse
 import json
@@ -87,12 +133,35 @@ class TrainingConfig:
 
 
 def build_support_vector(embedding: torch.Tensor, label_one_hot: torch.Tensor) -> torch.Tensor:
-    """Build input vector for a support example."""
+    """
+    Build the input vector for a SUPPORT example.
+    
+    For support examples, the model receives the word embedding concatenated with
+    the one-hot encoded label and a query flag of 0. This tells the transformer:
+    "Here is a word and its category -- use this to update your plastic weights."
+    
+    Vector layout: [embedding (D) | one_hot_label (ways) | query_flag (1)]
+    Total dimension: embedding_dim + ways + 1
+    
+    The query_flag=0 signals this is a support (training) example.
+    """
     return torch.cat([embedding, label_one_hot, torch.zeros(1, device=embedding.device)])
 
 
 def build_query_vector(embedding: torch.Tensor, ways: int) -> torch.Tensor:
-    """Build input vector for a query example."""
+    """
+    Build the input vector for a QUERY example.
+    
+    For query examples, the label portion is all zeros (the model doesn't know the
+    answer) and the query flag is set to 1. This tells the transformer:
+    "Classify this word based on what you learned from the support set."
+    
+    Vector layout: [embedding (D) | zeros (ways) | query_flag (1)]
+    Total dimension: embedding_dim + ways + 1
+    
+    The query_flag=1 signals this is a query (test) example.
+    The model must output logits over the `ways` classes in its output.
+    """
     return torch.cat(
         [
             embedding,
@@ -112,55 +181,83 @@ def train_epoch(
     config: TrainingConfig,
     ways: int,
 ) -> Tuple[float, Dict[str, float]]:
-    """Train for one epoch (multiple episodes)."""
+    """
+    Train for one epoch, which consists of many episodes.
+    
+    Each episode is a complete few-shot learning trial:
+      1. Sample a new set of categories and words
+      2. Reset the transformer's plastic state (fresh start)
+      3. Feed support examples one-by-one (plastic weights adapt)
+      4. Feed query examples one-by-one (compute classification loss)
+      5. Backpropagate the loss to update the OUTER LOOP parameters
+         (encoder weights, transformer fixed weights, plasticity coefficients)
+    
+    The key insight: the outer loop optimizer (AdamW) learns parameters that make
+    the inner loop adaptation (plastic weight updates) effective across episodes.
+    """
     encoder.train()
     transformer.train()
     total_loss = 0.0
-    eta_values: List[float] = []
-    plastic_values: List[float] = []
+    eta_values: List[float] = []      # Track plasticity learning rates
+    plastic_values: List[float] = []  # Track plastic weight magnitudes
     
     for ep_idx in range(config.episodes_per_epoch):
         if ep_idx % 10 == 0:
             print(f"  Training episode {ep_idx+1}/{config.episodes_per_epoch}", flush=True)
         
-        # Sample episode
+        # --- STEP 1: Sample a fresh episode (new categories, new words) ---
         support_strings, support_labels, query_strings, query_labels, category_names = task.sample_episode()
         
-        # Encode strings to embeddings
-        support_embeddings = encoder(support_strings)
-        query_embeddings = encoder(query_strings)
+        # --- STEP 2: Encode word strings into embedding vectors ---
+        # The encoder converts strings like "dog" into dense vectors of size embedding_dim.
+        # These embeddings are what the transformer actually operates on.
+        support_embeddings = encoder(support_strings)  # shape: (num_support, embedding_dim)
+        query_embeddings = encoder(query_strings)      # shape: (num_query, embedding_dim)
         
-        # Convert labels to tensors
+        # Convert labels to tensors for loss computation
         support_labels_tensor = torch.tensor(support_labels, dtype=torch.long, device=device)
         query_labels_tensor = torch.tensor(query_labels, dtype=torch.long, device=device)
         
-        # Initialize transformer state
+        # --- STEP 3: Initialize fresh plastic state for this episode ---
+        # Each episode starts with zeroed-out plastic weights. The plastic state
+        # will be modified by the support examples to encode task-specific knowledge.
         state = transformer.init_state(device)
         optimizer.zero_grad()
         episode_loss = torch.tensor(0.0, device=device)
         
-        # Process support set (adapt plastic weights)
+        # --- STEP 4: Process support set (INNER LOOP -- adapt plastic weights) ---
+        # Feed each support example sequentially. The transformer sees the word
+        # embedding + its true label, and updates its plastic weights accordingly.
+        # After processing all support examples, the plastic weights encode a mapping
+        # from word embeddings to category labels.
         for idx in range(support_embeddings.shape[0]):
             embedding = support_embeddings[idx]
             label = support_labels_tensor[idx]
-            one_hot = F.one_hot(label, num_classes=ways).float()
-            step_vec = build_support_vector(embedding, one_hot)
-            outputs = transformer.forward_step(step_vec, state)
+            one_hot = F.one_hot(label, num_classes=ways).float()  # Convert label to one-hot
+            step_vec = build_support_vector(embedding, one_hot)   # [embedding | label | 0]
+            outputs = transformer.forward_step(step_vec, state)   # Process & update plastic weights
             eta_values.append(float(outputs["eta"].item()))
             plastic_values.append(float(outputs["diagnostics"]["plastic_norm"].item()))
         
-        # Process query set (compute loss)
+        # --- STEP 5: Process query set (compute classification loss) ---
+        # Now feed query examples (without labels). The transformer must use its
+        # adapted plastic weights to classify each query word. The output logits
+        # are compared against the true labels via cross-entropy loss.
         for idx in range(query_embeddings.shape[0]):
             embedding = query_embeddings[idx]
             label = query_labels_tensor[idx]
-            step_vec = build_query_vector(embedding, ways)
-            outputs = transformer.forward_step(step_vec, state)
-            logits = outputs["logits"].unsqueeze(0)
-            episode_loss = episode_loss + loss_fn(logits, label.unsqueeze(0))
+            step_vec = build_query_vector(embedding, ways)          # [embedding | zeros | 1]
+            outputs = transformer.forward_step(step_vec, state)     # Classify using adapted weights
+            logits = outputs["logits"].unsqueeze(0)                 # shape: (1, ways)
+            episode_loss = episode_loss + loss_fn(logits, label.unsqueeze(0))  # Cross-entropy loss
             eta_values.append(float(outputs["eta"].item()))
             plastic_values.append(float(outputs["diagnostics"]["plastic_norm"].item()))
         
-        # Backpropagate and update weights
+        # --- STEP 6: OUTER LOOP update ---
+        # Backpropagate through the entire episode (support + query processing)
+        # to update the encoder, fixed transformer weights, and plasticity parameters.
+        # This gradient flows through the plastic weight update rules, teaching the
+        # model to adapt better in future episodes.
         episode_loss.backward()
         torch.nn.utils.clip_grad_norm_(
             list(encoder.parameters()) + list(transformer.parameters()),
@@ -187,7 +284,23 @@ def evaluate(
     ways: int,
     num_episodes: int,
 ) -> Dict[str, float]:
-    """Evaluate on multiple episodes."""
+    """
+    Evaluate the model on multiple episodes (no outer-loop weight updates).
+    
+    This follows the same episode structure as training:
+      1. Reset plastic state
+      2. Process support set (adapt plastic weights)
+      3. Classify query set and measure accuracy
+    
+    The only difference from training is that we don't backpropagate or update
+    the encoder/transformer parameters. The plastic weight adaptation still
+    happens within each episode (that's the whole point -- the model adapts
+    at test time using only the support examples).
+    
+    Note: For the gradient plasticity rule, we need gradients enabled even during
+    evaluation because the gradient-based plasticity rule requires computing
+    gradients of an internal loss to update plastic weights within each episode.
+    """
     encoder.eval()
     transformer.eval()
     losses: List[float] = []
@@ -195,10 +308,12 @@ def evaluate(
     eta_values: List[float] = []
     plastic_values: List[float] = []
     
-    # Confusion matrix
+    # Confusion matrix to visualize which categories get confused with each other
     confusion_matrix = np.zeros((ways, ways), dtype=np.int64)
     
-    # Use gradient context if using gradient-based plasticity
+    # For gradient-based plasticity, we need gradient computation even at eval time
+    # because the inner-loop adaptation uses torch.autograd.grad to compute
+    # plastic weight updates. For Hebbian/none rules, no gradients are needed.
     context = torch.enable_grad if transformer.rule == "gradient" else torch.no_grad
     
     with context():
@@ -206,22 +321,24 @@ def evaluate(
             if episode_idx % 10 == 0:
                 print(f"  Evaluating episode {episode_idx+1}/{num_episodes}", flush=True)
             
-            # Sample episode
+            # Sample a fresh episode with new categories and words
             support_strings, support_labels, query_strings, query_labels, category_names = task.sample_episode()
             
-            # Encode strings
+            # Encode word strings to embedding vectors
             support_embeddings = encoder(support_strings)
             query_embeddings = encoder(query_strings)
             
             support_labels_tensor = torch.tensor(support_labels, dtype=torch.long, device=device)
             query_labels_tensor = torch.tensor(query_labels, dtype=torch.long, device=device)
             
+            # Fresh plastic state for each episode -- the model must re-learn
+            # from scratch using only the support examples each time
             state = transformer.init_state(device)
             loss = 0.0
             correct = 0
             total = 0
             
-            # Process support set
+            # Adapt plastic weights using support examples (inner loop)
             for idx in range(support_embeddings.shape[0]):
                 embedding = support_embeddings[idx]
                 label = support_labels_tensor[idx]
@@ -231,7 +348,7 @@ def evaluate(
                 eta_values.append(float(outputs["eta"].item()))
                 plastic_values.append(float(outputs["diagnostics"]["plastic_norm"].item()))
             
-            # Process query set
+            # Classify query examples using adapted plastic weights
             for idx in range(query_embeddings.shape[0]):
                 embedding = query_embeddings[idx]
                 label = query_labels_tensor[idx]
@@ -239,12 +356,12 @@ def evaluate(
                 outputs = transformer.forward_step(step_vec, state)
                 logits = outputs["logits"]
                 loss += loss_fn(logits.unsqueeze(0), label.unsqueeze(0)).item()
-                pred = logits.argmax().item()
+                pred = logits.argmax().item()    # Predicted class = highest logit
                 true_label = label.item()
                 correct += int(pred == true_label)
                 total += 1
                 
-                # Update confusion matrix
+                # Track predictions vs. truth in the confusion matrix
                 confusion_matrix[true_label, pred] += 1
                 
                 eta_values.append(float(outputs["eta"].item()))
@@ -270,7 +387,19 @@ def evaluate(
 
 
 def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int) -> Dict:
-    """Execute a single experimental run with given seed."""
+    """
+    Execute a single experimental run with a given seed.
+    
+    This sets up the full pipeline:
+      1. Create train/test WordCategoryTask instances with disjoint word splits
+      2. Initialize the encoder (string -> embedding) and plastic transformer
+      3. Train for multiple epochs, each consisting of many episodes
+      4. After each epoch, evaluate on held-out test episodes
+      5. Return training history and final metrics
+    
+    The train and test tasks use different words from the same categories,
+    so the model must generalize to unseen words at test time.
+    """
     set_seed(seed)
     print(f"[seed={seed}] Starting single run...", flush=True)
     
@@ -292,7 +421,16 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
         )
     )
     
-    # Create encoder and transformer
+    # --- Choose the word encoder ---
+    # The encoder determines how words are represented as vectors.
+    # Different encoders capture different levels of semantic information:
+    #   - Word2VecEncoder: Uses pre-trained GloVe embeddings (rich semantic info)
+    #   - SimpleSemanticEncoder: Category-based embeddings (words in same category
+    #     start with similar vectors, giving the model a semantic "head start")
+    #   - OneHotTextEncoder: Each word gets a unique learned embedding (no built-in
+    #     semantic structure -- the model must learn everything from scratch)
+    #   - CharacterEncoder: Builds embeddings from character sequences via LSTM
+    #     (captures morphological similarity, e.g., "cat" vs "carpet")
     if args.use_word2vec_encoder:
         print(f"[seed={seed}] Using Word2VecEncoder with GloVe embeddings", flush=True)
         encoder = Word2VecEncoder(
@@ -324,17 +462,21 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
             dropout=args.dropout,
         ).to(device)
     
+    # --- Build the plastic transformer ---
+    # input_dim = embedding_dim + ways + 1, because each input vector is:
+    #   [word_embedding (embedding_dim) | label_or_zeros (ways) | query_flag (1)]
+    # output_dim = ways, because the model outputs a logit for each category
     transformer = PlasticTransformerModel(
-        input_dim=args.embedding_dim + args.ways + 1,
-        output_dim=args.ways,
+        input_dim=args.embedding_dim + args.ways + 1,  # Embedding + label slot + query flag
+        output_dim=args.ways,                          # One logit per category
         model_dim=args.model_dim,
         num_heads=args.num_heads,
         num_layers=args.num_layers,
         ffn_dim=args.ffn_dim,
         dropout=args.dropout,
         aux_dim=args.aux_dim,
-        rule=args.rule,
-        eta0=args.eta0,
+        rule=args.rule,      # "hebbian", "gradient", or "none" (controls inner-loop adaptation)
+        eta0=args.eta0,      # Base plasticity learning rate
         max_norm=args.max_norm,
     ).to(device)
     
@@ -347,11 +489,19 @@ def execute_single_run(args: argparse.Namespace, device: torch.device, seed: int
         clip_norm=args.clip_norm,
     )
     
+    # --- Outer-loop optimizer ---
+    # AdamW optimizes ALL learnable parameters across episodes:
+    #   - Encoder parameters (how words are embedded)
+    #   - Transformer fixed weights (the base network)
+    #   - Plasticity coefficients alpha, beta (how strongly plastic updates are applied)
+    #   - eta0 controls the plasticity learning rate magnitude
+    # These are the "meta-parameters" that make few-shot adaptation work.
     optimizer = torch.optim.AdamW(
         list(encoder.parameters()) + list(transformer.parameters()),
         lr=train_cfg.lr,
         weight_decay=train_cfg.weight_decay,
     )
+    # Cross-entropy loss for multi-class classification
     loss_fn = nn.CrossEntropyLoss()
     
     history: List[Dict[str, float]] = []
