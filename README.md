@@ -1,4 +1,4 @@
-# Performance Evaluation on Transformers Augmented with Hebbian and Gradient-Based Plasticity
+## Performance Evaluation on Transformers Augmented with Hebbian and Gradient-Based Plasticity
 
 **Authors:** Brianna Grissom & Christina Wang  
 **Course:** APMTH 226 — Fall 2025
