@@ -3,9 +3,12 @@
 **Authors:** Brianna Grissom & Christina Wang  
 **Course:** APMTH 226 — Fall 2025
 
+<img width="459" height="362" alt="Screenshot 2026-08-10 at 4 15 35 PM" src="https://github.com/user-attachments/assets/e827f2fc-7fec-45b2-9bde-793ee1adb521" />
+
 ## Overview
 
-This project evaluates decoder-only Transformers augmented with fast-weight components updated via neuromodulated **Hebbian** or **gradient-based** plasticity rules. The fast weights enable rapid, in-sequence adaptation at inference time without modifying the Transformer's static parameters.
+
+This project evaluates Transformer models equipped with 'fast weights'—a type of temporary memory. Using specific learning rules, these fast weights allow the model to quickly adapt to new tasks, without altering its permanent, pre-trained knowledge.
 
 We reproduce and extend the experiments from [Chaudhary (2025)](https://arxiv.org/abs/2504.07843), comparing three settings:
 
@@ -26,6 +29,7 @@ We reproduce and extend the experiments from [Chaudhary (2025)](https://arxiv.or
 See `final_report.pdf` for the full report.
 
 ## Repository Layout
+
 
 ```
 .
@@ -69,6 +73,9 @@ python -m src.experiments.copying \
 
 ### One-Shot Image Classification (CIFAR-FS / Omniglot)
 
+<img width="1002" height="240" alt="Screenshot 2026-08-10 at 4 13 26 PM" src="https://github.com/user-attachments/assets/b8b9875d-2af0-47d6-a96c-96d517faf15b" />
+
+
 ```bash
 python -m src.experiments.one_shot_classification \
   --rule hebbian --dataset cifarfs \
@@ -80,6 +87,8 @@ python -m src.experiments.one_shot_classification \
 Set `--dataset omniglot` for Omniglot. Torchvision downloads CIFAR-100 and Omniglot into `./data` automatically.
 
 ### Three-Shot Text Category Classification
+
+<img width="359" height="362" alt="Screenshot 2026-08-10 at 4 10 56 PM" src="https://github.com/user-attachments/assets/9230c922-f743-434a-9b56-7c1df45f4ef2" />
 
 ```bash
 python -m src.experiments.few_shot_word_category \
